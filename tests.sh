@@ -27,9 +27,6 @@ internal_build_cpp() {
     export CXX="g++-4.8" CC="gcc-4.8"
   fi
 
-  # Initialize any submodules.
-  git submodule update --init --recursive
-
   ./autogen.sh
   ./configure CXXFLAGS="-fPIC"  # -fPIC is needed for python cpp test.
                                 # See python/setup.py for more details
@@ -38,7 +35,7 @@ internal_build_cpp() {
 
 build_cpp() {
   internal_build_cpp
-  make check -j2 || (cat src/test-suite.log; false)
+  make check -j2
   cd conformance && make test_cpp && cd ..
 
   # The benchmark code depends on cmake, so test if it is installed before
@@ -47,7 +44,10 @@ build_cpp() {
   # appears to be missing it: https://github.com/travis-ci/travis-ci/issues/6996
   if [[ $(type cmake 2>/dev/null) ]]; then
     # Verify benchmarking code can build successfully.
-    cd benchmarks && make cpp-benchmark && cd ..
+    git submodule init
+    git submodule update
+    cd third_party/benchmark && cmake -DCMAKE_BUILD_TYPE=Release && make && cd ../..
+    cd benchmarks && make && ./generate-datasets && cd ..
   else
     echo ""
     echo "WARNING: Skipping validation of the bench marking code, cmake isn't installed."
@@ -56,8 +56,6 @@ build_cpp() {
 }
 
 build_cpp_distcheck() {
-  # Initialize any submodules.
-  git submodule update --init --recursive
   ./autogen.sh
   ./configure
   make dist
@@ -89,7 +87,9 @@ build_cpp_distcheck() {
 }
 
 build_csharp() {
-  # Required for conformance tests and to regenerate protos.
+  # Just for the conformance tests. We don't currently
+  # need to really build protoc, but it's simplest to keep with the
+  # conventions of the other builds.
   internal_build_cpp
   NUGET=/usr/local/bin/nuget.exe
 
@@ -103,10 +103,6 @@ build_csharp() {
   mkdir dotnettmp
   (cd dotnettmp; dotnet new > /dev/null)
   rm -rf dotnettmp
-
-  # Check that the protos haven't broken C# codegen.
-  # TODO(jonskeet): Fail if regenerating creates any changes.
-  csharp/generate_protos.sh
 
   csharp/buildall.sh
   cd conformance && make test_csharp && cd ..
@@ -228,8 +224,7 @@ internal_install_python_deps() {
   fi
   # Install tox (OS X doesn't have pip).
   if [ $(uname -s) == "Darwin" ]; then
-    brew upgrade python
-    python3 -m pip install tox
+    sudo easy_install tox
   else
     sudo pip install tox
   fi
@@ -352,7 +347,6 @@ generate_php_test_proto() {
   rm -rf generated
   mkdir generated
   ../../src/protoc --php_out=generated         \
-    proto/empty/echo.proto                     \
     proto/test.proto                           \
     proto/test_include.proto                   \
     proto/test_no_namespace.proto              \
@@ -426,7 +420,7 @@ build_php5.5_c() {
   use_php 5.5
   wget https://phar.phpunit.de/phpunit-4.8.0.phar -O /usr/bin/phpunit
   pushd php/tests
-  /bin/bash ./test.sh 5.5
+  /bin/bash ./test.sh
   popd
   # TODO(teboring): Add it back
   # pushd conformance
@@ -437,7 +431,7 @@ build_php5.5_c() {
 build_php5.5_zts_c() {
   use_php_zts 5.5
   wget https://phar.phpunit.de/phpunit-4.8.0.phar -O /usr/bin/phpunit
-  cd php/tests && /bin/bash ./test.sh 5.5-zts && cd ../..
+  cd php/tests && /bin/bash ./test.sh && cd ../..
   # TODO(teboring): Add it back
   # pushd conformance
   # make test_php_zts_c
@@ -460,7 +454,7 @@ build_php5.6() {
 build_php5.6_c() {
   use_php 5.6
   wget https://phar.phpunit.de/phpunit-5.7.0.phar -O /usr/bin/phpunit
-  cd php/tests && /bin/bash ./test.sh 5.6 && cd ../..
+  cd php/tests && /bin/bash ./test.sh && cd ../..
   # TODO(teboring): Add it back
   # pushd conformance
   # make test_php_c
@@ -470,7 +464,7 @@ build_php5.6_c() {
 build_php5.6_zts_c() {
   use_php_zts 5.6
   wget https://phar.phpunit.de/phpunit-5.7.0.phar -O /usr/bin/phpunit
-  cd php/tests && /bin/bash ./test.sh 5.6-zts && cd ../..
+  cd php/tests && /bin/bash ./test.sh && cd ../..
   # TODO(teboring): Add it back
   # pushd conformance
   # make test_php_zts_c
@@ -518,7 +512,7 @@ build_php7.0() {
 build_php7.0_c() {
   use_php 7.0
   wget https://phar.phpunit.de/phpunit-5.6.0.phar -O /usr/bin/phpunit
-  cd php/tests && /bin/bash ./test.sh 7.0 && cd ../..
+  cd php/tests && /bin/bash ./test.sh && cd ../..
   # TODO(teboring): Add it back
   # pushd conformance
   # make test_php_c
@@ -528,7 +522,7 @@ build_php7.0_c() {
 build_php7.0_zts_c() {
   use_php_zts 7.0
   wget https://phar.phpunit.de/phpunit-5.6.0.phar -O /usr/bin/phpunit
-  cd php/tests && /bin/bash ./test.sh 7.0-zts && cd ../..
+  cd php/tests && /bin/bash ./test.sh && cd ../..
   # TODO(teboring): Add it back.
   # pushd conformance
   # make test_php_zts_c
@@ -582,7 +576,7 @@ build_php7.1() {
 build_php7.1_c() {
   use_php 7.1
   wget https://phar.phpunit.de/phpunit-5.6.0.phar -O /usr/bin/phpunit
-  cd php/tests && /bin/bash ./test.sh 7.1 && cd ../..
+  cd php/tests && /bin/bash ./test.sh && cd ../..
   pushd conformance
   # make test_php_c
   popd
@@ -591,7 +585,7 @@ build_php7.1_c() {
 build_php7.1_zts_c() {
   use_php_zts 7.1
   wget https://phar.phpunit.de/phpunit-5.6.0.phar -O /usr/bin/phpunit
-  cd php/tests && /bin/bash ./test.sh 7.1-zts && cd ../..
+  cd php/tests && /bin/bash ./test.sh && cd ../..
   pushd conformance
   # make test_php_c
   popd
